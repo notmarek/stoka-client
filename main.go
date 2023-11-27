@@ -46,7 +46,30 @@ type TokensResponse struct {
 	TokenType    string `json:"token_type"`
 	Token        string `json:"token"`
 	RefreshToken string `json:"refresh_token"`
-	Expiration   string `json:"expirations"`
+	Expiration   string `json:"expiration"`
+}
+
+func loadJson[T any](path string) (obj T, err error) {
+	in, err := os.Open(path)
+	if err != nil {
+		return *new(T), err
+	}
+	defer in.Close()
+	var out T
+	data, _ := io.ReadAll(in)
+	_ = json.Unmarshal(data, &out)
+	return out, nil
+}
+
+func saveJson(obj any, path string) (err error) {
+	out, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	j, _ := json.MarshalIndent(obj, "", "\t")
+	out.WriteString(string(j))
+	return nil
 }
 
 func downloadFile(filepath string, url string, token string) (err error) {
@@ -99,8 +122,11 @@ func download_books(endpoint string, token string, seen_hashes []string, file_pa
 		if !slices.Contains(seen_hashes, book.Hash) {
 			seen_hashes = append(seen_hashes, book.Hash)
 			download_book(endpoint, token, file_path, book.Id)
+		} else {
+			fmt.Printf("Skipping \"%#v\"", book)
 		}
 	}
+	saveJson(AcquiredBooks{Hashes: seen_hashes}, file_path+"/.seen.json")
 }
 
 func get_books(endpoint string, token string) []Book {
@@ -116,7 +142,7 @@ func get_books(endpoint string, token string) []Book {
 	decoder.Decode(&out)
 
 	// save the data to a config file
-	fmt.Printf("%#v\n", out)
+	// fmt.Printf("%#v\n", out)
 	return out.Data
 
 }
@@ -141,7 +167,7 @@ func login(endpoint string, username string, password string) TokensResponse {
 		decoder.Decode(&out)
 
 		// save the data to a config file
-		fmt.Printf("%#v\n", out)
+		// fmt.Printf("%#v\n", out)
 		return out
 	} else {
 		var out ErrorResponse
@@ -155,24 +181,57 @@ func login(endpoint string, username string, password string) TokensResponse {
 
 func main() {
 	var (
-		endpoint  string
-		username  string
-		password  string
-		filepath  string
-		loginflag bool
-		dl        bool
+		tokens      TokensResponse
+		endpoint    string
+		username    string
+		password    string
+		filepath    string
+		confpath    string
+		seen_hashes []string
+		loginflag   bool
+		dl          bool
 	)
 
 	flag.BoolVar(&loginflag, "login", false, "if you want to login")
 	flag.BoolVar(&dl, "download", false, "if you want to dl")
-	flag.StringVar(&endpoint, "endpoint", "http://127.0.0.1:1337", "Endpoint of your stoka instance")
-	flag.StringVar(&filepath, "filepath", "./mnt/us/Documents/Stoka", "Where to store your documents :)")
+	flag.StringVar(&endpoint, "endpoint", "https://stoka.notmarek.com", "Endpoint of your stoka instance")
+	flag.StringVar(&confpath, "confpath", "/mnt/us/stoka.json", "Where to store the config file.")
+	flag.StringVar(&filepath, "filepath", "/mnt/us/documents/Stoka", "Where to store your documents :)")
 	flag.StringVar(&username, "username", "", "your username to be used along --login")
 	flag.StringVar(&password, "password", "", "your password to be used along --login")
 	flag.Parse()
+	os.MkdirAll(filepath, os.ModePerm)
 
 	if loginflag {
-		tokens := login(endpoint, username, password)
-		download_books(endpoint, tokens.Token, []string{}, filepath)
+		tokens = login(endpoint, username, password)
+		config := ConfigFile{
+			Tokens:   tokens,
+			FilePath: filepath,
+			Endpoint: endpoint,
+		}
+		saveJson(config, confpath)
+		fmt.Println("Config saved!")
+		return
+	} else {
+		conf, err := loadJson[ConfigFile](confpath)
+		if err != nil {
+			fmt.Println("Couldn't load config file!")
+		} else {
+			endpoint = conf.Endpoint
+			tokens = conf.Tokens
+			filepath = conf.FilePath
+		}
+
+		sh, err := loadJson[AcquiredBooks](filepath + "/.seen.json")
+		if err != nil {
+			fmt.Println("Couldn't load seen hashes!")
+			seen_hashes = []string{}
+		} else {
+			seen_hashes = sh.Hashes
+		}
+	}
+
+	if dl {
+		download_books(endpoint, tokens.Token, seen_hashes, filepath)
 	}
 }
