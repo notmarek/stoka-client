@@ -196,7 +196,7 @@ func main() {
 	flag.BoolVar(&dl, "download", false, "if you want to dl")
 	flag.StringVar(&endpoint, "endpoint", "https://stoka.notmarek.com", "Endpoint of your stoka instance")
 	flag.StringVar(&confpath, "confpath", "/mnt/us/stoka.json", "Where to store the config file.")
-	flag.StringVar(&filepath, "filepath", "/mnt/us/documents/Stoka", "Where to store your documents :)")
+	flag.StringVar(&filepath, "filepath", "/mnt/us/Stoka", "Where to store your documents :)")
 	flag.StringVar(&username, "username", "", "your username to be used along --login")
 	flag.StringVar(&password, "password", "", "your password to be used along --login")
 	flag.Parse()
